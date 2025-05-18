@@ -19,13 +19,8 @@ async def create_sale(
     sale: SaleCreate, 
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Create a new sale with items
-    """
-    # Generate a unique reference number
     reference_number = f"SALE-{uuid.uuid4().hex[:8].upper()}"
     
-    # Create the sale
     db_sale = Sale(
         reference_number=reference_number,
         total_amount=sale.total_amount,
@@ -41,7 +36,6 @@ async def create_sale(
     await db.commit()
     await db.refresh(db_sale)
     
-    # Create the sale items and update inventory
     for item in sale.items:
         db_sale_item = SaleItem(
             sale_id=db_sale.id,
@@ -54,27 +48,23 @@ async def create_sale(
         
         db.add(db_sale_item)
         
-        # Update inventory
         result = await db.execute(
             select(Inventory).filter(Inventory.product_id == item.product_id)
         )
         inventory = result.scalars().first()
         
         if inventory:
-            # Record inventory change
             db_change = InventoryChange(
                 inventory_id=inventory.id,
-                quantity_change=-item.quantity,  # Negative because we're selling
+                quantity_change=-item.quantity,
                 reason=f"Sale: {reference_number}"
             )
             db.add(db_change)
             
-            # Update inventory quantity
             inventory.quantity -= item.quantity
     
     await db.commit()
     
-    # Get the complete sale with items
     result = await db.execute(
         select(Sale)
         .filter(Sale.id == db_sale.id)
@@ -82,7 +72,6 @@ async def create_sale(
     
     created_sale = result.scalars().first()
     
-    # Get product names for the response
     for item in created_sale.items:
         result = await db.execute(select(Product).filter(Product.id == item.product_id))
         product = result.scalars().first()
@@ -101,12 +90,8 @@ async def get_sales(
     category_id: Optional[int] = None,
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Get all sales with optional filtering and pagination
-    """
     query = select(Sale)
     
-    # Apply filters
     filters = []
     
     if start_date:
@@ -118,9 +103,7 @@ async def get_sales(
     if filters:
         query = query.filter(and_(*filters))
     
-    # Product and category filters require joins and subqueries, so we'll handle them separately
     if product_id or category_id:
-        # First, get the sale IDs that match our product/category filter
         sale_id_query = select(SaleItem.sale_id).distinct()
         
         if product_id:
@@ -139,18 +122,14 @@ async def get_sales(
         
         query = query.filter(Sale.id.in_(sale_ids))
     
-    # Apply pagination
     query = query.order_by(Sale.created_at.desc()).offset(skip).limit(limit)
     
     result = await db.execute(query)
     sales = result.scalars().all()
     
-    # Create a list to hold our processed sales
     processed_sales = []
     
-    # Explicitly load the items for each sale to avoid lazy loading issues
     for sale in sales:
-        # Create a new dict or object to hold the sale data
         sale_dict = {
             "id": sale.id,
             "reference_number": sale.reference_number,
@@ -165,13 +144,11 @@ async def get_sales(
             "items": []
         }
         
-        # Explicitly load items for each sale
         items_result = await db.execute(
             select(SaleItem).filter(SaleItem.sale_id == sale.id)
         )
         sale_items = items_result.scalars().all()
         
-        # Process each item and add to the sale_dict
         for item in sale_items:
             item_dict = {
                 "id": item.id,
@@ -183,7 +160,6 @@ async def get_sales(
                 "total": item.total
             }
             
-            # Get product name
             product_result = await db.execute(select(Product).filter(Product.id == item.product_id))
             product = product_result.scalars().first()
             if product:
@@ -200,16 +176,12 @@ async def get_sale(
     sale_id: int, 
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Get a specific sale by ID
-    """
     result = await db.execute(select(Sale).filter(Sale.id == sale_id))
     sale = result.scalars().first()
     
     if not sale:
         raise HTTPException(status_code=404, detail="Sale not found")
     
-    # Create a dictionary to hold the sale data
     sale_dict = {
         "id": sale.id,
         "reference_number": sale.reference_number,
@@ -224,13 +196,11 @@ async def get_sale(
         "items": []
     }
     
-    # Explicitly load items for the sale
     items_result = await db.execute(
         select(SaleItem).filter(SaleItem.sale_id == sale.id)
     )
     sale_items = items_result.scalars().all()
     
-    # Process each item and add to the sale_dict
     for item in sale_items:
         item_dict = {
             "id": item.id,
@@ -242,7 +212,6 @@ async def get_sale(
             "total": item.total
         }
         
-        # Get product name
         product_result = await db.execute(select(Product).filter(Product.id == item.product_id))
         product = product_result.scalars().first()
         if product:
@@ -259,12 +228,8 @@ async def filter_sales(
     limit: int = 100,
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Advanced filtering of sales
-    """
     query = select(Sale)
     
-    # Apply filters
     filters = []
     
     if filter_params.start_date:
@@ -282,7 +247,6 @@ async def filter_sales(
     if filters:
         query = query.filter(and_(*filters))
     
-    # Product and category filters require joins and subqueries
     if filter_params.product_id or filter_params.category_id:
         sale_id_query = select(SaleItem.sale_id).distinct()
         
@@ -302,28 +266,23 @@ async def filter_sales(
         
         query = query.filter(Sale.id.in_(sale_ids))
     
-    # Apply pagination
     query = query.order_by(Sale.created_at.desc()).offset(skip).limit(limit)
     
     result = await db.execute(query)
     sales = result.scalars().all()
     
-    # Explicitly load the items for each sale
     for sale in sales:
-        # Explicitly load items for each sale
         items_result = await db.execute(
             select(SaleItem).filter(SaleItem.sale_id == sale.id)
         )
         sale_items = items_result.scalars().all()
         
-        # Get product names for each sale item
         for item in sale_items:
             product_result = await db.execute(select(Product).filter(Product.id == item.product_id))
             product = product_result.scalars().first()
             if product:
                 setattr(item, "product_name", product.name)
         
-        # Manually set the items attribute
         sale.items = sale_items
     
     return sales

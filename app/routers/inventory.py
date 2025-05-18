@@ -20,17 +20,12 @@ async def create_inventory(
     inventory: InventoryCreate, 
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Create inventory for a product
-    """
-    # Check if product exists
     product_result = await db.execute(select(Product).filter(Product.id == inventory.product_id))
     product = product_result.scalars().first()
     
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
     
-    # Check if inventory already exists for this product
     inventory_result = await db.execute(
         select(Inventory).filter(Inventory.product_id == inventory.product_id)
     )
@@ -55,9 +50,6 @@ async def get_all_inventory(
     limit: int = 100, 
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Get all inventory records with pagination
-    """
     result = await db.execute(select(Inventory).offset(skip).limit(limit))
     inventory_items = result.scalars().all()
     return inventory_items
@@ -66,9 +58,6 @@ async def get_all_inventory(
 async def get_low_stock_alerts(
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Get products with inventory below their low stock threshold
-    """
     query = select(
         Inventory.product_id,
         Product.name.label("product_name"),
@@ -99,9 +88,6 @@ async def get_inventory(
     inventory_id: int, 
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Get a specific inventory record by ID
-    """
     result = await db.execute(select(Inventory).filter(Inventory.id == inventory_id))
     inventory = result.scalars().first()
     
@@ -115,9 +101,6 @@ async def get_inventory_by_product(
     product_id: int, 
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Get inventory for a specific product
-    """
     result = await db.execute(select(Inventory).filter(Inventory.product_id == product_id))
     inventory = result.scalars().first()
     
@@ -132,9 +115,6 @@ async def update_inventory(
     inventory_update: InventoryUpdate, 
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Update an inventory record
-    """
     result = await db.execute(select(Inventory).filter(Inventory.id == inventory_id))
     db_inventory = result.scalars().first()
     
@@ -143,7 +123,6 @@ async def update_inventory(
     
     update_data = inventory_update.dict(exclude_unset=True)
     
-    # Record inventory change if quantity is updated
     if "quantity" in update_data and db_inventory.quantity != update_data["quantity"]:
         quantity_change = update_data["quantity"] - db_inventory.quantity
         db_change = InventoryChange(
@@ -153,7 +132,6 @@ async def update_inventory(
         )
         db.add(db_change)
     
-    # Update last_restock_date if quantity is increased
     if "quantity" in update_data and update_data["quantity"] > db_inventory.quantity:
         update_data["last_restock_date"] = datetime.now()
     
@@ -170,24 +148,17 @@ async def record_inventory_change(
     change: InventoryChangeCreate, 
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Record a change in inventory
-    """
-    # Check if inventory exists
     result = await db.execute(select(Inventory).filter(Inventory.id == change.inventory_id))
     inventory = result.scalars().first()
     
     if not inventory:
         raise HTTPException(status_code=404, detail="Inventory not found")
     
-    # Create the inventory change record
     db_change = InventoryChange(**change.dict())
     db.add(db_change)
     
-    # Update the inventory quantity
     inventory.quantity += change.quantity_change
     
-    # Update last_restock_date if quantity is increased
     if change.quantity_change > 0:
         inventory.last_restock_date = datetime.now()
     
@@ -203,17 +174,12 @@ async def get_inventory_changes(
     limit: int = 100, 
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Get all changes for a specific inventory
-    """
-    # Check if inventory exists
     inv_result = await db.execute(select(Inventory).filter(Inventory.id == inventory_id))
     inventory = inv_result.scalars().first()
     
     if not inventory:
         raise HTTPException(status_code=404, detail="Inventory not found")
     
-    # Get the changes
     result = await db.execute(
         select(InventoryChange)
         .filter(InventoryChange.inventory_id == inventory_id)

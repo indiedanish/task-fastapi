@@ -23,34 +23,28 @@ async def get_revenue(
     time_frame: TimeFrame = TimeFrame.DAILY,
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Get revenue data for a specified time period and granularity
-    """
-    # Set default date range if not provided
     if not end_date:
         end_date = datetime.now()
     
     if not start_date:
         if time_frame == TimeFrame.DAILY:
-            start_date = end_date - timedelta(days=30)  # Last 30 days
+            start_date = end_date - timedelta(days=30)
         elif time_frame == TimeFrame.WEEKLY:
-            start_date = end_date - timedelta(weeks=12)  # Last 12 weeks
+            start_date = end_date - timedelta(weeks=12)
         elif time_frame == TimeFrame.MONTHLY:
-            start_date = end_date - timedelta(days=365)  # Last 12 months
-        else:  # YEARLY
-            start_date = end_date - timedelta(days=5*365)  # Last 5 years
+            start_date = end_date - timedelta(days=365)
+        else:
+            start_date = end_date - timedelta(days=5*365)
     
-    # Create SQL for the appropriate time grouping based on time_frame
     if time_frame == TimeFrame.DAILY:
         date_expr = func.date(Sale.created_at)
     elif time_frame == TimeFrame.WEEKLY:
         date_expr = func.date(func.date_trunc('week', Sale.created_at))
     elif time_frame == TimeFrame.MONTHLY:
         date_expr = func.date(func.date_trunc('month', Sale.created_at))
-    else:  # YEARLY
+    else:
         date_expr = func.date(func.date_trunc('year', Sale.created_at))
     
-    # Query to get revenue data
     query = select(
         date_expr.label("date"),
         func.sum(Sale.total_amount).label("revenue"),
@@ -66,12 +60,10 @@ async def get_revenue(
     result = await db.execute(query)
     rows = result.fetchall()
     
-    # Calculate totals
     total_revenue = sum(row.revenue for row in rows)
     total_count = sum(row.count for row in rows)
     average_revenue = total_revenue / len(rows) if rows else 0
     
-    # Format the response
     data = [
         {
             "date": row.date,
@@ -93,10 +85,6 @@ async def compare_periods(
     comparison: ComparisonRequest,
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Compare revenue between two time periods
-    """
-    # Helper function to get revenue data for a period
     async def get_period_data(start, end, category_id=None, product_id=None):
         query = select(
             func.date(Sale.created_at).label("date"),
@@ -106,7 +94,6 @@ async def compare_periods(
             Sale.created_at.between(start, end)
         )
         
-        # Apply category or product filters if provided
         if category_id or product_id:
             sale_id_query = select(SaleItem.sale_id).distinct()
             
@@ -131,12 +118,10 @@ async def compare_periods(
         result = await db.execute(query)
         rows = result.fetchall()
         
-        # Calculate totals
         total_revenue = sum(row.revenue for row in rows)
         total_count = sum(row.count for row in rows)
         average_revenue = total_revenue / len(rows) if rows else 0
         
-        # Format the response
         data = [
             {
                 "date": row.date,
@@ -153,7 +138,6 @@ async def compare_periods(
             "total_count": total_count
         }
     
-    # Get data for each period
     first_period = await get_period_data(
         comparison.first_period_start, 
         comparison.first_period_end,
@@ -168,7 +152,6 @@ async def compare_periods(
         comparison.product_id
     )
     
-    # Calculate percentage change
     if first_period["total_revenue"] == 0:
         percentage_change = 100.0 if second_period["total_revenue"] > 0 else 0.0
     else:
@@ -189,17 +172,12 @@ async def get_category_revenue(
     end_date: Optional[datetime] = None,
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Get revenue breakdown by category
-    """
-    # Set default date range if not provided
     if not end_date:
         end_date = datetime.now()
     
     if not start_date:
-        start_date = end_date - timedelta(days=30)  # Last 30 days
+        start_date = end_date - timedelta(days=30)
     
-    # Query to get revenue by category
     query = select(
         Category.id.label("category_id"),
         Category.name.label("category_name"),
@@ -222,10 +200,8 @@ async def get_category_revenue(
     result = await db.execute(query)
     rows = result.fetchall()
     
-    # Calculate total revenue to get percentages
     total_revenue = sum(row.revenue for row in rows)
     
-    # Format the response
     categories = [
         {
             "category_id": row.category_id,
@@ -246,17 +222,12 @@ async def get_product_revenue(
     limit: int = 10,
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Get revenue breakdown by product
-    """
-    # Set default date range if not provided
     if not end_date:
         end_date = datetime.now()
     
     if not start_date:
-        start_date = end_date - timedelta(days=30)  # Last 30 days
+        start_date = end_date - timedelta(days=30)
     
-    # Query to get revenue by product
     query = select(
         Product.id.label("product_id"),
         Product.name.label("product_name"),
@@ -289,10 +260,8 @@ async def get_product_revenue(
     result = await db.execute(query)
     rows = result.fetchall()
     
-    # Calculate total revenue to get percentages
     total_revenue = sum(row.revenue for row in rows)
     
-    # Format the response
     products = [
         {
             "product_id": row.product_id,
@@ -315,17 +284,12 @@ async def get_low_performing_products(
     limit: int = 10,
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Get the lowest performing products by revenue
-    """
-    # Set default date range if not provided
     if not end_date:
         end_date = datetime.now()
     
     if not start_date:
-        start_date = end_date - timedelta(days=30)  # Last 30 days
+        start_date = end_date - timedelta(days=30)
     
-    # Query to get revenue by product in ascending order
     query = select(
         Product.id.label("product_id"),
         Product.name.label("product_name"),
@@ -353,10 +317,8 @@ async def get_low_performing_products(
     result = await db.execute(query)
     rows = result.fetchall()
     
-    # Calculate total revenue to get percentages
     total_revenue = sum(row.revenue for row in rows)
     
-    # Format the response
     products = [
         {
             "product_id": row.product_id,

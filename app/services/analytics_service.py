@@ -22,34 +22,28 @@ class AnalyticsService:
         end_date: Optional[datetime] = None,
         time_frame: TimeFrame = TimeFrame.DAILY
     ) -> RevenueData:
-        """
-        Get revenue data for a specified time period and granularity
-        """
-        # Set default date range if not provided
         if not end_date:
             end_date = datetime.now()
         
         if not start_date:
             if time_frame == TimeFrame.DAILY:
-                start_date = end_date - timedelta(days=30)  # Last 30 days
+                start_date = end_date - timedelta(days=30)
             elif time_frame == TimeFrame.WEEKLY:
-                start_date = end_date - timedelta(weeks=12)  # Last 12 weeks
+                start_date = end_date - timedelta(weeks=12)
             elif time_frame == TimeFrame.MONTHLY:
-                start_date = end_date - timedelta(days=365)  # Last 12 months
-            else:  # YEARLY
-                start_date = end_date - timedelta(days=5*365)  # Last 5 years
+                start_date = end_date - timedelta(days=365)
+            else:
+                start_date = end_date - timedelta(days=5*365)
         
-        # Create SQL for the appropriate time grouping based on time_frame
         if time_frame == TimeFrame.DAILY:
             date_trunc = text("DATE(created_at)")
         elif time_frame == TimeFrame.WEEKLY:
             date_trunc = text("DATE(DATE_TRUNC('week', created_at))")
         elif time_frame == TimeFrame.MONTHLY:
             date_trunc = text("DATE(DATE_TRUNC('month', created_at))")
-        else:  # YEARLY
+        else:
             date_trunc = text("DATE(DATE_TRUNC('year', created_at))")
         
-        # Query to get revenue data
         query = select(
             date_trunc.label("date"),
             func.sum(Sale.total_amount).label("revenue"),
@@ -65,12 +59,10 @@ class AnalyticsService:
         result = await self.db.execute(query)
         rows = result.fetchall()
         
-        # Calculate totals
         total_revenue = sum(row.revenue for row in rows)
         total_count = sum(row.count for row in rows)
         average_revenue = total_revenue / len(rows) if rows else 0
         
-        # Format the response
         data = [
             {
                 "date": row.date,
@@ -88,10 +80,6 @@ class AnalyticsService:
         }
 
     async def compare_periods(self, comparison: ComparisonRequest) -> ComparisonResult:
-        """
-        Compare revenue between two time periods
-        """
-        # Get data for each period
         first_period = await self._get_period_data(
             comparison.first_period_start, 
             comparison.first_period_end,
@@ -106,7 +94,6 @@ class AnalyticsService:
             comparison.product_id
         )
         
-        # Calculate percentage change
         if first_period["total_revenue"] == 0:
             percentage_change = 100.0 if second_period["total_revenue"] > 0 else 0.0
         else:
@@ -122,7 +109,6 @@ class AnalyticsService:
         }
 
     async def _get_period_data(self, start, end, category_id=None, product_id=None):
-        """Helper function to get revenue data for a period"""
         query = select(
             func.date(Sale.created_at).label("date"),
             func.sum(Sale.total_amount).label("revenue"),
@@ -131,7 +117,6 @@ class AnalyticsService:
             Sale.created_at.between(start, end)
         )
         
-        # Apply category or product filters if provided
         if category_id or product_id:
             sale_id_query = select(SaleItem.sale_id).distinct()
             
@@ -156,12 +141,10 @@ class AnalyticsService:
         result = await self.db.execute(query)
         rows = result.fetchall()
         
-        # Calculate totals
         total_revenue = sum(row.revenue for row in rows)
         total_count = sum(row.count for row in rows)
         average_revenue = total_revenue / len(rows) if rows else 0
         
-        # Format the response
         data = [
             {
                 "date": row.date,
@@ -183,17 +166,12 @@ class AnalyticsService:
         start_date: Optional[datetime] = None,
         end_date: Optional[datetime] = None
     ) -> List[CategoryRevenue]:
-        """
-        Get revenue breakdown by category
-        """
-        # Set default date range if not provided
         if not end_date:
             end_date = datetime.now()
         
         if not start_date:
-            start_date = end_date - timedelta(days=30)  # Last 30 days
+            start_date = end_date - timedelta(days=30)
         
-        # Query to get revenue by category
         query = select(
             Category.id.label("category_id"),
             Category.name.label("category_name"),
@@ -216,10 +194,8 @@ class AnalyticsService:
         result = await self.db.execute(query)
         rows = result.fetchall()
         
-        # Calculate total revenue to get percentages
         total_revenue = sum(row.revenue for row in rows)
         
-        # Format the response
         categories = [
             {
                 "category_id": row.category_id,
@@ -239,17 +215,12 @@ class AnalyticsService:
         category_id: Optional[int] = None,
         limit: int = 10
     ) -> List[ProductRevenue]:
-        """
-        Get revenue breakdown by product
-        """
-        # Set default date range if not provided
         if not end_date:
             end_date = datetime.now()
         
         if not start_date:
-            start_date = end_date - timedelta(days=30)  # Last 30 days
+            start_date = end_date - timedelta(days=30)
         
-        # Query to get revenue by product
         query = select(
             Product.id.label("product_id"),
             Product.name.label("product_name"),
@@ -282,10 +253,8 @@ class AnalyticsService:
         result = await self.db.execute(query)
         rows = result.fetchall()
         
-        # Calculate total revenue to get percentages
         total_revenue = sum(row.revenue for row in rows)
         
-        # Format the response
         products = [
             {
                 "product_id": row.product_id,
@@ -307,17 +276,12 @@ class AnalyticsService:
         end_date: Optional[datetime] = None,
         limit: int = 10
     ) -> List[ProductRevenue]:
-        """
-        Get the lowest performing products by revenue
-        """
-        # Set default date range if not provided
         if not end_date:
             end_date = datetime.now()
         
         if not start_date:
-            start_date = end_date - timedelta(days=30)  # Last 30 days
+            start_date = end_date - timedelta(days=30)
         
-        # Query to get revenue by product in ascending order
         query = select(
             Product.id.label("product_id"),
             Product.name.label("product_name"),
@@ -345,10 +309,8 @@ class AnalyticsService:
         result = await self.db.execute(query)
         rows = result.fetchall()
         
-        # Calculate total revenue to get percentages
         total_revenue = sum(row.revenue for row in rows)
         
-        # Format the response
         products = [
             {
                 "product_id": row.product_id,
