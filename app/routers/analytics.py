@@ -42,25 +42,25 @@ async def get_revenue(
     
     # Create SQL for the appropriate time grouping based on time_frame
     if time_frame == TimeFrame.DAILY:
-        date_trunc = text("DATE(created_at)")
+        date_expr = func.date(Sale.created_at)
     elif time_frame == TimeFrame.WEEKLY:
-        date_trunc = text("DATE(DATE_TRUNC('week', created_at))")
+        date_expr = func.date(func.date_trunc('week', Sale.created_at))
     elif time_frame == TimeFrame.MONTHLY:
-        date_trunc = text("DATE(DATE_TRUNC('month', created_at))")
+        date_expr = func.date(func.date_trunc('month', Sale.created_at))
     else:  # YEARLY
-        date_trunc = text("DATE(DATE_TRUNC('year', created_at))")
+        date_expr = func.date(func.date_trunc('year', Sale.created_at))
     
     # Query to get revenue data
     query = select(
-        date_trunc.label("date"),
+        date_expr.label("date"),
         func.sum(Sale.total_amount).label("revenue"),
         func.count(Sale.id).label("count")
     ).filter(
         Sale.created_at.between(start_date, end_date)
     ).group_by(
-        text("date")
+        date_expr
     ).order_by(
-        text("date")
+        date_expr
     )
     
     result = await db.execute(query)
