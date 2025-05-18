@@ -1,0 +1,1 @@
+from app.routers import categories, products, inventory, sales, analytics
