@@ -145,15 +145,55 @@ async def get_sales(
     result = await db.execute(query)
     sales = result.scalars().all()
     
-    # Get product names for each sale item
-    for sale in sales:
-        for item in sale.items:
-            result = await db.execute(select(Product).filter(Product.id == item.product_id))
-            product = result.scalars().first()
-            if product:
-                setattr(item, "product_name", product.name)
+    # Create a list to hold our processed sales
+    processed_sales = []
     
-    return sales
+    # Explicitly load the items for each sale to avoid lazy loading issues
+    for sale in sales:
+        # Create a new dict or object to hold the sale data
+        sale_dict = {
+            "id": sale.id,
+            "reference_number": sale.reference_number,
+            "total_amount": sale.total_amount,
+            "tax_amount": sale.tax_amount,
+            "discount_amount": sale.discount_amount,
+            "payment_method": sale.payment_method,
+            "customer_name": sale.customer_name,
+            "customer_email": sale.customer_email,
+            "notes": sale.notes,
+            "created_at": sale.created_at,
+            "items": []
+        }
+        
+        # Explicitly load items for each sale
+        items_result = await db.execute(
+            select(SaleItem).filter(SaleItem.sale_id == sale.id)
+        )
+        sale_items = items_result.scalars().all()
+        
+        # Process each item and add to the sale_dict
+        for item in sale_items:
+            item_dict = {
+                "id": item.id,
+                "sale_id": item.sale_id,
+                "product_id": item.product_id,
+                "quantity": item.quantity,
+                "price": item.price,
+                "discount": item.discount,
+                "total": item.total
+            }
+            
+            # Get product name
+            product_result = await db.execute(select(Product).filter(Product.id == item.product_id))
+            product = product_result.scalars().first()
+            if product:
+                item_dict["product_name"] = product.name
+            
+            sale_dict["items"].append(item_dict)
+        
+        processed_sales.append(sale_dict)
+    
+    return processed_sales
 
 @router.get("/{sale_id}", response_model=SaleResponse)
 async def get_sale(
@@ -169,14 +209,48 @@ async def get_sale(
     if not sale:
         raise HTTPException(status_code=404, detail="Sale not found")
     
-    # Get product names for each item
-    for item in sale.items:
-        result = await db.execute(select(Product).filter(Product.id == item.product_id))
-        product = result.scalars().first()
-        if product:
-            setattr(item, "product_name", product.name)
+    # Create a dictionary to hold the sale data
+    sale_dict = {
+        "id": sale.id,
+        "reference_number": sale.reference_number,
+        "total_amount": sale.total_amount,
+        "tax_amount": sale.tax_amount,
+        "discount_amount": sale.discount_amount,
+        "payment_method": sale.payment_method,
+        "customer_name": sale.customer_name,
+        "customer_email": sale.customer_email,
+        "notes": sale.notes,
+        "created_at": sale.created_at,
+        "items": []
+    }
     
-    return sale
+    # Explicitly load items for the sale
+    items_result = await db.execute(
+        select(SaleItem).filter(SaleItem.sale_id == sale.id)
+    )
+    sale_items = items_result.scalars().all()
+    
+    # Process each item and add to the sale_dict
+    for item in sale_items:
+        item_dict = {
+            "id": item.id,
+            "sale_id": item.sale_id,
+            "product_id": item.product_id,
+            "quantity": item.quantity,
+            "price": item.price,
+            "discount": item.discount,
+            "total": item.total
+        }
+        
+        # Get product name
+        product_result = await db.execute(select(Product).filter(Product.id == item.product_id))
+        product = product_result.scalars().first()
+        if product:
+            item_dict["product_name"] = product.name
+        
+        sale_dict["items"].append(item_dict)
+    
+    return sale_dict
 
 @router.post("/filter", response_model=List[SaleResponse])
 async def filter_sales(
@@ -234,12 +308,22 @@ async def filter_sales(
     result = await db.execute(query)
     sales = result.scalars().all()
     
-    # Get product names for each sale item
+    # Explicitly load the items for each sale
     for sale in sales:
-        for item in sale.items:
-            result = await db.execute(select(Product).filter(Product.id == item.product_id))
-            product = result.scalars().first()
+        # Explicitly load items for each sale
+        items_result = await db.execute(
+            select(SaleItem).filter(SaleItem.sale_id == sale.id)
+        )
+        sale_items = items_result.scalars().all()
+        
+        # Get product names for each sale item
+        for item in sale_items:
+            product_result = await db.execute(select(Product).filter(Product.id == item.product_id))
+            product = product_result.scalars().first()
             if product:
                 setattr(item, "product_name", product.name)
+        
+        # Manually set the items attribute
+        sale.items = sale_items
     
     return sales
